@@ -74,13 +74,22 @@ services:
       - ollama
     entrypoint: >
       sh -c "
-        n8n start &
-        sleep 15 &&
-        n8n import:credentials --input=.n8n/credentials.json &&
-        sleep 2 &&
-        n8n import:workflow --input=.n8n/workflow.yml &&
-        sleep 2 &&
-        n8n update:workflow --id=5CTBxRh464L2OOgd --active=true || true &&
-        wait
+        if [ ! -f /home/node/.n8n-initialized ]; then
+          echo 'First run - importing data...'
+          n8n start &
+          sleep 15 &&
+          n8n import:credentials --input=.n8n/credentials.json &&
+          sleep 2 &&
+          n8n import:workflow --input=.n8n/workflow.yml &&
+          sleep 2 &&
+          n8n update:workflow --id=5CTBxRh464L2OOgd --active=true || true &&
+          sleep 2 &&
+          touch /home/node/.n8n-initialized &&
+          echo 'Import complete - container will restart...' &&
+          exit 0
+        else
+          echo 'Already initialized - skipping import'
+          echo 'Starting n8n normally...'
+          exec n8n start
+        fi
       "
-
