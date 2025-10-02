@@ -34,7 +34,7 @@ While these patterns are tested and can run in production, **we strongly recomme
 
 Each pattern lives in its own directory with comprehensive documentation:
 
-- **[`onprem-ai-document-processor/`](./onprem-ai-document-processor/)** - AI-powered document processing pipeline using n8n, Ollama, Docling, and MinIO for automated document ingestion, analysis, and storage
+- **[`onprem-ai-document-processing/`](./onprem-ai-document-processing/)** - AI-powered document processing pipeline using n8n, Ollama, Docling, and MinIO for automated document ingestion, analysis, and storage
 
 *More patterns coming soon...*
 
