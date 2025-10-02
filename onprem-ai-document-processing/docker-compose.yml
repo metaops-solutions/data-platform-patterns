@@ -1,0 +1,86 @@
+version: '3.8'
+
+services:
+  docling:
+    image: ghcr.io/docling-project/docling-serve:latest
+    container_name: docling
+    ports:
+      - "5001:5001"
+    environment:
+      DOCLING_SERVE_ENABLE_UI: "1"
+      DOCLING_SERVE_MAX_SYNC_WAIT: "600"
+    restart: unless-stopped
+  minio:
+    image: minio/minio:latest
+    container_name: minio
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    environment:
+      MINIO_ROOT_USER: minioadmin
+      MINIO_ROOT_PASSWORD: minioadmin
+      MINIO_NOTIFY_WEBHOOK_ENABLE_N8NHOOK: on
+      MINIO_NOTIFY_WEBHOOK_ENDPOINT_N8NHOOK: http://n8n:5678/webhook/7e3fa947-0713-4e5f-84e5-f666129fe29a
+    volumes:
+      - ./minio/data:/data
+    command: server /data --console-address ":9001"
+  createbuckets:
+    image: minio/mc:latest
+    depends_on:
+      - minio
+    entrypoint: >
+      /bin/sh -c "
+      sleep 5;
+      mc alias set local http://minio:9000 minioadmin minioadmin &&
+      mc mb local/pdf &&
+      mc mb local/pdf-summarized &&
+      mc anonymous set public local/pdf &&
+      mc anonymous set public local/pdf-summarized &&
+      mc event add local/pdf arn:minio:sqs::N8NHOOK:webhook --event put --suffix .pdf ||
+      exit 0;
+      "
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    restart: unless-stopped
+    ports:
+      - "11434:11434"  # Ollama API port
+    volumes:
+      - ./ollama/data:/root/.ollama  # persist models
+    entrypoint: >
+      sh -c "
+        /bin/ollama serve &
+        sleep 5 &&
+        ollama pull mistral-nemo:12b &&
+        wait
+      "
+  n8n:
+    image: n8nio/n8n:latest
+    container_name: n8n
+    restart: unless-stopped
+    ports:
+      - "5678:5678"
+    environment:
+      - N8N_ENCRYPTION_KEY=VxavSckfiCzJRucX/jIeh/DVLnTvW/OJzImRbPVUT5M=
+      - GENERIC_TIMEZONE=Europe/London
+      - N8N_HOST=localhost
+      - N8N_PORT=5678
+      - N8N_PROTOCOL=http
+    volumes:
+      - ./n8n/data:/home/node/.n8n 
+    depends_on:
+      - minio
+      - docling
+      - ollama
+    entrypoint: >
+      sh -c "
+        n8n start &
+        sleep 15 &&
+        n8n import:credentials --input=.n8n/credentials.json &&
+        sleep 2 &&
+        n8n import:workflow --input=.n8n/workflow.yml &&
+        sleep 2 &&
+        n8n update:workflow --id=5CTBxRh464L2OOgd --active=true || true &&
+        wait
+      "
+

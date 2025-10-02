@@ -1,0 +1,437 @@
+{
+  "name": "n8n-pdf-summarizer",
+  "nodes": [
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "version": 2,
+            "leftValue": "",
+            "caseSensitive": true,
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "a277fc5c-6873-49d5-b67b-39df0efc8a61",
+              "operator": {
+                "type": "number",
+                "operation": "lte"
+              },
+              "leftValue": "={{ $('Get Filesize').item.json.filesize_in_bytes }}",
+              "rightValue": "={{ 10000000 }}"
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "9e121b54-edd5-44cc-8c33-2aaa1df8c267",
+      "name": "Is Valid File?",
+      "type": "n8n-nodes-base.if",
+      "position": [
+        -656,
+        384
+      ],
+      "typeVersion": 2.2
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForEachItem",
+        "jsCode": "function convertToBytes(size) {\n    const units = {\n        b: 1,\n        bytes: 1,\n        kb: 1024,\n        mb: 1024 * 1024,\n        gb: 1024 * 1024 * 1024,\n    };\n\n    // Extract the number and unit using regex\n    const regex = /([\\d.]+)\\s*(bytes|b|kb|mb|gb)/i;\n    const match = size.match(regex);\n\n    if (!match) {\n        throw new Error(`Invalid size format: \"${size}\"`);\n    }\n\n    const value = parseFloat(match[1]);\n    const unit = match[2].toLowerCase();\n\n    // Calculate the size in bytes\n    const factor = units[unit];\n    if (!factor) {\n        throw new Error(`Unsupported unit: \"${unit}\"`);\n    }\n\n    return Math.round(value * factor);\n}\n\nconst data = $('Download from S3').first().binary.data;\n\nreturn {\n  json: { filesize_in_bytes: convertToBytes(data.fileSize) },\n  binary: { data }\n}"
+      },
+      "id": "b28a41a9-ade7-483b-bdac-16ac4faf7d17",
+      "name": "Get Filesize",
+      "type": "n8n-nodes-base.code",
+      "position": [
+        -1056,
+        384
+      ],
+      "typeVersion": 2
+    },
+    {
+      "parameters": {
+        "content": "### 2. Parse pdf using Docling\nUpload the pdf to Docling to parse it to markdown",
+        "height": 480,
+        "width": 784,
+        "color": 4
+      },
+      "id": "b298349c-3b1f-4953-8189-23daddafb9af",
+      "name": "Sticky Note1",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1120,
+        256
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "### 3. Summarize document with Ollama running locally\nlocal model is used to breakdown the PDF into topics and provide insights for each. The number of topics and insights are not set and can be variable.",
+        "height": 480,
+        "width": 600,
+        "color": 5
+      },
+      "id": "d5a196ce-c67c-41e2-93ec-09c736e49010",
+      "name": "Sticky Note2",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -320,
+        256
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "content": "### 5. Format Response and upload to S3\nFinally, we'll format the output to markdown and upload to S3.",
+        "height": 472,
+        "width": 512,
+        "color": 2
+      },
+      "id": "8e48cf35-ba79-4123-8ed0-0c5ba19d9523",
+      "name": "Sticky Note4",
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        304,
+        256
+      ],
+      "typeVersion": 1
+    },
+    {
+      "parameters": {
+        "text": "=Document as follows:\n{{ $json.document.md_content }}",
+        "schemaType": "manual",
+        "inputSchema": "{\n  \"type\": \"array\",\n  \"items\": {\n    \"type\": \"object\",\n     \"properties\": {\n       \"topic\": { \"type\": \"string\" },\n       \"insights\": {\n         \"type\": \"array\",\n         \"items\": {\n           \"type\": \"object\",\n           \"properties\": {\n             \"title\": { \"type\": \"string\" },\n             \"body\": { \"type\": \"string\" }\n           }\n         }\n       }\n     }\n  }\n}",
+        "options": {
+          "systemPromptTemplate": "You are a note-taking agent helping the user to summarise this PDF in note form. Breakdown the document into distinct topics and provide a 3 paragraph summary of each topic discussed in the document.\n\nIMPORTANT: You must only respond with the raw JSON array that adheres to the provided schema. Do not include markdown code fences, introductory text, or any other explanations"
+        }
+      },
+      "id": "e0378ffd-b3fa-4b24-b0e4-b577e6103b22",
+      "name": "Information Extractor",
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "position": [
+        -240,
+        368
+      ],
+      "typeVersion": 1,
+      "onError": "continueErrorOutput"
+    },
+    {
+      "parameters": {
+        "assignments": {
+          "assignments": [
+            {
+              "id": "10335d9e-7e0a-4ee1-a275-71d2f75b6bba",
+              "name": "response",
+              "type": "string",
+              "value": "={{\n$json.output.map(item => {\n  return `## ${item.topic}\\n${item.insights.map(insight => \n    `- **${insight.title}**: ${insight.body}`\n  ).join('\\n')}`;\n}).join('\\n\\n');\n}}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "id": "8d1f58b9-802c-4a44-ae80-4fd972585fdf",
+      "name": "Format Response",
+      "type": "n8n-nodes-base.set",
+      "position": [
+        352,
+        352
+      ],
+      "typeVersion": 3.4
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Unable to parse document. Please ensure file is less than 10mb with maximum of 20 pages.\",\n  \"result\": []\n}",
+        "options": {
+          "responseCode": 400
+        }
+      },
+      "id": "713f8df9-e30e-42c8-a886-44c4304160cc",
+      "name": "400 Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        -512,
+        544
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "{\n  \"error\": \"Unable to parse document. An unknown error occurred.\",\n  \"result\": []\n}",
+        "options": {
+          "responseCode": 500
+        }
+      },
+      "id": "3e5ef86d-8f4b-45c7-83fe-c6bce9d97e59",
+      "name": "500 Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "position": [
+        80,
+        544
+      ],
+      "typeVersion": 1.1
+    },
+    {
+      "parameters": {
+        "bucketName": "pdf",
+        "fileKey": "={{ $json.body.Key.replace('pdf/', '') }}"
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        -1312,
+        384
+      ],
+      "id": "4ba207fa-21c1-44e8-bcc7-218095165754",
+      "name": "Download from S3",
+      "credentials": {
+        "s3": {
+          "id": "7CNRXcD4Cb5vghua",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "model": "mistral-nemo:12b",
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmOllama",
+      "typeVersion": 1,
+      "position": [
+        -240,
+        608
+      ],
+      "id": "fd5330fc-0c69-44c0-856e-4ca111cc74dc",
+      "name": "Ollama Model",
+      "credentials": {
+        "ollamaApi": {
+          "id": "HIvKoFwRiaomj8OG",
+          "name": "Ollama account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "7e3fa947-0713-4e5f-84e5-f666129fe29a",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2.1,
+      "position": [
+        -1520,
+        384
+      ],
+      "id": "2289ba2e-c924-4383-9b50-0274bf9709df",
+      "name": "Webhook",
+      "webhookId": "7e3fa947-0713-4e5f-84e5-f666129fe29a"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "http://docling:5001/v1/convert/file",
+        "sendBody": true,
+        "contentType": "multipart-form-data",
+        "bodyParameters": {
+          "parameters": [
+            {
+              "parameterType": "formBinaryData",
+              "name": "files",
+              "inputDataFieldName": "data"
+            },
+            {
+              "name": "to_formats",
+              "value": "md"
+            },
+            {
+              "name": "ocr_engine",
+              "value": "easyocr"
+            },
+            {
+              "name": "table_mode",
+              "value": "accurate"
+            },
+            {
+              "name": "image_export_mode",
+              "value": "placeholder"
+            }
+          ]
+        },
+        "options": {
+          "response": {
+            "response": {
+              "responseFormat": "json"
+            }
+          }
+        }
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.2,
+      "position": [
+        -864,
+        384
+      ],
+      "id": "a77558d1-26f0-48f5-b2d9-ba1a82507dfc",
+      "name": "Docling parse pdf to md"
+    },
+    {
+      "parameters": {
+        "operation": "upload",
+        "bucketName": "pdf-summarized",
+        "fileName": "={{ $('Is Valid File?').item.json.document.filename.replace(/\\.pdf$/i, '.md') }}",
+        "binaryData": false,
+        "fileContent": "={{ $json.response }}",
+        "additionalFields": {}
+      },
+      "type": "n8n-nodes-base.s3",
+      "typeVersion": 1,
+      "position": [
+        592,
+        352
+      ],
+      "id": "75e58d31-57ca-40bb-a79d-7f9d675312fd",
+      "name": "Upload md to S3",
+      "credentials": {
+        "s3": {
+          "id": "7CNRXcD4Cb5vghua",
+          "name": "S3 account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "content": "### 1. Webhook triggered by S3 when there is a new file pdf in the bucket",
+        "height": 480,
+        "width": 512,
+        "color": 6
+      },
+      "type": "n8n-nodes-base.stickyNote",
+      "position": [
+        -1648,
+        256
+      ],
+      "typeVersion": 1,
+      "id": "09ebd8f4-e958-4ac2-b5fb-a9c0ef0772e7",
+      "name": "Sticky Note"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Get Filesize": {
+      "main": [
+        [
+          {
+            "node": "Docling parse pdf to md",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Is Valid File?": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "400 Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format Response": {
+      "main": [
+        [
+          {
+            "node": "Upload md to S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor": {
+      "main": [
+        [
+          {
+            "node": "Format Response",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "500 Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Download from S3": {
+      "main": [
+        [
+          {
+            "node": "Get Filesize",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Ollama Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Download from S3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Docling parse pdf to md": {
+      "main": [
+        [
+          {
+            "node": "Is Valid File?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "versionId": "f25728a8-7761-441b-a699-a6a5a16915f3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "58cc52854dc5db1ac5c8c8346b8cd42b1dcd4e1a09d806c90ebf794993ce3355"
+  },
+  "id": "5CTBxRh464L2OOgd",
+  "tags": []
+}
